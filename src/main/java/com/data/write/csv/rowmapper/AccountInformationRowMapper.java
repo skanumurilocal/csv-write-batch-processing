@@ -13,6 +13,9 @@ public class AccountInformationRowMapper implements RowMapper<AccountInformation
 	public AccountInformation mapRow(ResultSet rs, int rowNum) throws SQLException {
 		return AccountInformation.builder()
 				.accountNumber(rs.getLong("account_number"))
+				.stateName(rs.getString("state"))
+				.phoneNumber(rs.getString("phone_number"))
+				.customerName(rs.getString("customer"))
 				.location01(rs.getInt("location01"))
 				.location02(rs.getInt("location02"))
 				.location03(rs.getInt("location03"))

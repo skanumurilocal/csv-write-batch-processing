@@ -1,10 +1,8 @@
 package com.data.write.csv.config;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.util.Iterator;
-import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import javax.sql.DataSource;
 
@@ -16,6 +14,7 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.repository.support.JobRepositoryFactoryBean;
+import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
@@ -32,9 +31,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import com.data.write.csv.model.AccountInformation;
 import com.data.write.csv.processor.AccountInformationProcessor;
 import com.data.write.csv.rowmapper.AccountInformationRowMapper;
-import com.fasterxml.jackson.core.JsonFactory;
+import com.data.write.csv.writer.AccountInformationWriter;
 import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -74,11 +72,9 @@ public class BatchConfiguration {
 	 
 	 @Bean
 	 public JdbcCursorItemReader<AccountInformation> reader() throws JsonParseException, IOException{
-		 JsonFactory jsonFactory = new JsonFactory();
-			JsonParser jp = jsonFactory.createJsonParser(new File("C:\\work\\generatedjson.json"));
-			jp.setCodec(new ObjectMapper());
-			JsonNode jsonNode = jp.readValueAsTree();
-			readJsonData(jsonNode);
+		
+		  String sqlWithwhereClause = sqlStr+readJsonData();
+		  System.out.println(sqlWithwhereClause);
 		  JdbcCursorItemReader<AccountInformation> reader = new JdbcCursorItemReader<AccountInformation>();
 		  reader.setDataSource(oracleSource());
 		  reader.setSql(sqlStr);
@@ -87,16 +83,17 @@ public class BatchConfiguration {
 		  return reader;
 	}
 	 
-	 void readJsonData(JsonNode jsonNode) {
-			Iterator<Map.Entry<String, JsonNode>> ite = jsonNode.fields();
-			while(ite.hasNext()){
-				Map.Entry<String, JsonNode> entry = ite.next();
-				if(entry.getValue().isObject()) {
-					readJsonData(entry.getValue());
-				} else {
-				    System.out.println("key:"+entry.getKey()+", value:"+entry.getValue());
-				}
-			}
+	 String readJsonData() throws IOException{
+		 byte[] jsonData = Files.readAllBytes(Paths.get("C:\\work\\generatedjson.json"));
+
+		//create ObjectMapper instance
+		ObjectMapper objectMapper = new ObjectMapper();
+
+		//read JSON like DOM Parser
+		JsonNode rootNode = objectMapper.readTree(jsonData);
+		JsonNode idNode = rootNode.path("query");
+		System.out.println("id = "+idNode.asText());
+		return idNode.asText();
 	 }
 	 
 	 @Bean
@@ -114,9 +111,16 @@ public class BatchConfiguration {
 	 }
 	 
 	 @Bean
-	 public AccountInformationProcessor processor(){
+    public ItemWriter<AccountInformation> databaseCsvItemWriter() {
+        FlatFileItemWriter<AccountInformation> csvFileWriter = new AccountInformationWriter();
+ 
+        return csvFileWriter;
+    }
+	 
+	@Bean
+	public AccountInformationProcessor processor(){
 	  return new AccountInformationProcessor();
-	 }
+	}
 	 
 	@Bean
 	 public Step step1() throws JsonParseException, IOException {
@@ -124,7 +128,7 @@ public class BatchConfiguration {
 				 .<AccountInformation,AccountInformation>chunk(10)
 				 .reader(reader())
 				 .processor(processor())
-				 .writer(writer())
+				 .writer(databaseCsvItemWriter())
 				 .build();
 	 }
 	 
